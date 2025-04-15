@@ -93,6 +93,7 @@ contract TSwapPool is ERC20 {
         string memory liquidityTokenName,
         string memory liquidityTokenSymbol
     ) ERC20(liquidityTokenName, liquidityTokenSymbol) {
+        // @audit-info zero-check address
         i_wethToken = IERC20(wethToken);
         i_poolToken = IERC20(poolToken);
     }
@@ -114,6 +115,8 @@ contract TSwapPool is ERC20 {
         uint256 wethToDeposit,
         uint256 minimumLiquidityTokensToMint,
         uint256 maximumPoolTokensToDeposit,
+        // @audit-issue HIGH param is not used but potentially crucial
+        // if someone sets a deadline next block, they could still deposit
         uint64 deadline
     )
         external
@@ -128,6 +131,7 @@ contract TSwapPool is ERC20 {
         }
         if (totalLiquidityTokenSupply() > 0) {
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
+            // @audit-info not used anymore
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
             // Our invariant says weth, poolTokens, and liquidity tokens must always have the same ratio after the
             // initial deposit
@@ -305,6 +309,7 @@ contract TSwapPool is ERC20 {
         public
         revertIfZero(inputAmount)
         revertIfDeadlinePassed(deadline)
+        // @audit-issue LOW wrong return
         returns (uint256 output)
     {
         uint256 inputReserves = inputToken.balanceOf(address(this));
