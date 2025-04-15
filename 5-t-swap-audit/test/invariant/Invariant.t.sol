@@ -55,13 +55,21 @@ contract Invariant is StdInvariant, Test {
         targetContract(address(handler));
     }
 
-    function statefulFuzz_testConstantProductFormulasStaysTheSame()
+    function statefulFuzz_testConstantProductFormulasStaysTheSameX()
         public
         view
     {
         // the change in the pool size of WETH should follow
         // Handler better to use to avoid messing with the contracts!
         assertEq(handler.actualDeltaX(), handler.expectedDeltaX());
+    }
+
+    function statefulFuzz_testConstantProductFormulasStaysTheSameY()
+        public
+        view
+    {
+        // the change in the pool size of WETH should follow
+        // Handler better to use to avoid messing with the contracts!
         assertEq(handler.actualDeltaY(), handler.expectedDeltaY());
     }
 }

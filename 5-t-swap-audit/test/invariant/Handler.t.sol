@@ -65,7 +65,7 @@ contract Handler is Test {
     function swapPoolTokenForWethBasedOnOuputWeth(uint256 outputWeth) public {
         // let's make sure that it's reasonable
         uint256 minWeth = pool.getMinimumWethDepositAmount();
-        outputWeth = bound(outputWeth, minWeth, weth.balanceOf(address(pool)));
+        outputWeth = bound(outputWeth, minWeth, 1e18);
         if (outputWeth >= weth.balanceOf(address(pool))) {
             // to not swap out everything
             return;
