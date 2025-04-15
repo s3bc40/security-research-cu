@@ -1,0 +1,32 @@
+{
+  "clientRemote": "",
+  "gitRemote": "",
+  "gitSha": "",
+  "treeEntries": [
+    {
+      "label": "Missing param deadline is docs",
+      "entryType": 1,
+      "author": "s3bc40",
+      "locations": [
+        {
+          "path": "5-t-swap-audit/src/TSwapPool.sol",
+          "startLine": 325,
+          "endLine": 335,
+          "label": "",
+          "description": ""
+        }
+      ],
+      "details": {
+        "severity": "Informational",
+        "difficulty": "N/A",
+        "type": "Auditing and Logging",
+        "description": "Missing description for `deadline` parameter int the docs of `TSwapPool::swapExactOutput`",
+        "exploit": "",
+        "recommendation": "Short term, \nLong term, \n"
+      }
+    }
+  ],
+  "auditedFiles": [],
+  "partiallyAuditedFiles": [],
+  "resolvedEntries": []
+}
