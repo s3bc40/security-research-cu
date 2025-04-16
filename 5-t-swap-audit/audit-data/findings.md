@@ -27,6 +27,92 @@ string memory liquidityTokenSymbol = string.concat(
 );
 ```
 
+## Low
+
+### [L-1] `TSwapPool::LiquidityAdded` event parameters out of order
+
+**Description:** When `LiquidityAdded` event emitted in the `TSwapPool::_addLiquidityMintAndTransfer` function, it logs the parameters out of order. The `poolTokenToDeposit` value should be in the third  parameter position.
+
+**Impact:** Event emission is incorrect, leading to off-chain functions potentially malfunctioning.
+
+**Recommended Mitigation:** 
+```diff
+- emit LiquidityAdded(msg.sender, poolTokensToDeposit, wethToDeposit);
++ emit LiquidityAdded(msg.sender, wethToDeposit, poolTokensToDeposit);
+```
+
+### [L-2] Default value returned by `TSwapPool::swapExactInput` results in incorrect return value given
+
+**Description:** The `swapExactInput` function is expected to return the actual amount of tokens bought by the caller. However, while it declares the named return value `ouput`, it is never assigned a value, nor uses an explicit return statement.
+
+**Impact:** The return value will always be 0.
+
+**Proof of Concept:** Add this function the `TSwapPool.t.sol`
+
+```javascript
+function testSwapExactInputAlwaysReturnZero(
+    uint256 inputAmount,
+    uint256 minOutputAmount
+) public {
+    vm.startPrank(liquidityProvider);
+    weth.approve(address(pool), 100e18);
+    poolToken.approve(address(pool), 100e18);
+    pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+    vm.stopPrank();
+
+    // Arrange
+    // Bound max to the user balance for allowance
+    inputAmount = bound(inputAmount, 1e18, poolToken.balanceOf(user));
+    minOutputAmount = bound(minOutputAmount, 1e18, weth.balanceOf(user));
+    // Check if we do not trigger TSwapPool__OutputTooLow error
+    uint256 inputReserves = poolToken.balanceOf(address(pool));
+    uint256 outputReserves = weth.balanceOf(address(pool));
+    uint256 outputAmount = pool.getOutputAmountBasedOnInput(
+        inputAmount,
+        inputReserves,
+        outputReserves
+    );
+    vm.assume(outputAmount > minOutputAmount); // Avoid triggering the revert
+
+    // Act
+    // Pranking user to swap exact input
+    vm.startPrank(user);
+    poolToken.approve(address(pool), 100e18);
+    uint256 outputReturned = pool.swapExactInput(
+        poolToken,
+        inputAmount,
+        weth,
+        minOutputAmount,
+        uint64(block.timestamp)
+    );
+    vm.stopPrank();
+
+    // Assert
+    assertEq(outputReturned, 0);
+}
+```
+
+**Recommended Mitigation:** 
+```diff
+function swapExactInput(
+    IERC20 inputToken,
+    uint256 inputAmount,
+    IERC20 outputToken,
+    uint256 minOutputAmount,
+    uint64 deadline
+)
+    public
+    revertIfZero(inputAmount)
+    revertIfDeadlinePassed(deadline)
+    returns (
+        // @audit-issue LOW wrong return
+-        uint256 output
++        uint256 outputAmount
+    )
+{
+```
+
+
 ## Medium
 
 ### [M-1] `TSwapPoll::deposit` is missing deadline check causing transactions to complete even after the deadline
@@ -55,4 +141,118 @@ function deposit(
         revertIfZero(wethToDeposit)
         returns (uint256 liquidityTokensToMint)
     {
+```
+
+## High
+
+### [H-1] Incorrect fee calculation in `TSwapPool::getInputAmountBasedOnOutput` causes protocol to take too many tokens from users, resulting in lost fees
+
+**Description:** The `TSwapPool::getInputAmountBasedOnOutput` function is intended to calculate the amount of tokens a user should deposit given an amount of output tokens. However, the function miscalculates the fee, it scales by 10_000 instead of 1_000.
+
+**Impact:** Protocol takes more fees than expected from users.
+
+**Proof of Concept:** Add this to the `TSwapPool.t.sol`
+
+```javascript
+    function testGetInputAmountBasedOnOutputMiscalculateFees(
+        uint256 outputAmount
+    ) public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        uint256 inputReserves = poolToken.balanceOf(address(pool));
+        uint256 outputReserves = weth.balanceOf(address(pool));
+        // We are applying a 0.03% fee
+        outputAmount = bound(outputAmount, 1e18, outputReserves);
+        uint256 numerator = ((inputReserves * outputAmount) * 1_000);
+        uint256 denominator = ((outputReserves - outputAmount) * 997);
+        vm.assume(denominator > 0); // Avoid division by zero
+        uint256 expectedInputAmount = (numerator / denominator);
+
+        // Act
+        uint256 inputAmount = pool.getInputAmountBasedOnOutput(
+            outputAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // Assert
+        assertGt(inputAmount, expectedInputAmount);
+    }
+
+```
+
+**Recommended Mitigation:** 
+```diff
+    function getInputAmountBasedOnOutput(
+        uint256 outputAmount,
+        uint256 inputReserves,
+        uint256 outputReserves
+    )
+        public
+        pure
+        revertIfZero(outputAmount)
+        revertIfZero(outputReserves)
+        returns (uint256 inputAmount)
+    {
+        // 997 / 10_000 = 91.3% fees!!
+        // @audit-issue HIGH wrong fees
+        // IMPACT: HIGH
+        // LIKELIHOOD: HIGH
+        return
+-            ((inputReserves * outputAmount) * 10_000) /
++            ((inputReserves * outputAmount) * 1_000) /
+            ((outputReserves - outputAmount) * 997);
+    }
+```
+
+
+### [H-2] Lack of slippage protection in `TSwapPool::swapExactOutput` causes users to receive less tokens than expected
+
+**Description:** The `swapExactOutput` function does not include any form of slippage protection. This function is similar to what is done to `TSwapPool::swapExactInput`, where the function specifies a `minOuputAmount`, the `swapExactOutput` function does not specify a `maxInputAmount`. 
+
+**Impact:** If market conditions change, the user may receive less tokens than expected. This could lead to a loss of funds for the user.
+
+**Proof of Concept:**
+1. The price of WETH is 1,000 USDC
+2. User inputs a `swapExactOutput` looking for 1 WETH
+    1. inputToken = USDC
+    2. outputToken = WETH
+    3. outputAmount = 1
+    4. deadline = whatever
+3. The function does not offer a maxInput amount
+4. As the transaction is pending in the mempool, the market change: 1 WETH = 10,000 USDC.
+5. The transaction is executed and the user ends up paying 10,000 USDC for 1 WETH, instead of 1,000 USDC.
+
+<!-- TODO make the test  -->
+
+**Recommended Mitigation:** 
+
+```diff
+function swapExactOutput(
+        IERC20 inputToken,
+        IERC20 outputToken,
+        uint256 outputAmount,
++       uint256 maxOutputAmount,
+        uint64 deadline
+    )
+.
+.
+.
+
+    uint256 inputReserves = inputToken.balanceOf(address(this));
+    uint256 outputReserves = outputToken.balanceOf(address(this));
+
+    inputAmount = getInputAmountBasedOnOutput(
+        outputAmount,
+        inputReserves,
+        outputReserves
+    );
++   if (inputAmout > maxInputAmount) {
++       revert();
++   }
 ```

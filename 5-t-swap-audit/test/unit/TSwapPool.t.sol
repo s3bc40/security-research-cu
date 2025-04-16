@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import { Test, console } from "forge-std/Test.sol";
-import { TSwapPool } from "../../src/PoolFactory.sol";
-import { ERC20Mock } from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
-import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {Test, console} from "forge-std/Test.sol";
+import {TSwapPool} from "../../src/PoolFactory.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 contract TSwapPoolTest is Test {
     TSwapPool pool;
@@ -17,7 +17,12 @@ contract TSwapPoolTest is Test {
     function setUp() public {
         poolToken = new ERC20Mock();
         weth = new ERC20Mock();
-        pool = new TSwapPool(address(poolToken), address(weth), "LTokenA", "LA");
+        pool = new TSwapPool(
+            address(poolToken),
+            address(weth),
+            "LTokenA",
+            "LA"
+        );
 
         weth.mint(liquidityProvider, 200e18);
         poolToken.mint(liquidityProvider, 200e18);
@@ -54,7 +59,13 @@ contract TSwapPoolTest is Test {
         // 110 * ~91 = 10,000
         uint256 expected = 9e18;
 
-        pool.swapExactInput(poolToken, 10e18, weth, expected, uint64(block.timestamp));
+        pool.swapExactInput(
+            poolToken,
+            10e18,
+            weth,
+            expected,
+            uint64(block.timestamp)
+        );
         assert(weth.balanceOf(user) >= expected);
     }
 
@@ -82,13 +93,94 @@ contract TSwapPoolTest is Test {
         vm.startPrank(user);
         uint256 expected = 9e18;
         poolToken.approve(address(pool), 10e18);
-        pool.swapExactInput(poolToken, 10e18, weth, expected, uint64(block.timestamp));
+        pool.swapExactInput(
+            poolToken,
+            10e18,
+            weth,
+            expected,
+            uint64(block.timestamp)
+        );
         vm.stopPrank();
 
         vm.startPrank(liquidityProvider);
         pool.approve(address(pool), 100e18);
         pool.withdraw(100e18, 90e18, 100e18, uint64(block.timestamp));
         assertEq(pool.totalSupply(), 0);
-        assert(weth.balanceOf(liquidityProvider) + poolToken.balanceOf(liquidityProvider) > 400e18);
+        assert(
+            weth.balanceOf(liquidityProvider) +
+                poolToken.balanceOf(liquidityProvider) >
+                400e18
+        );
+    }
+
+    function testGetInputAmountBasedOnOutputMiscalculateFees(
+        uint256 outputAmount
+    ) public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        uint256 inputReserves = poolToken.balanceOf(address(pool));
+        uint256 outputReserves = weth.balanceOf(address(pool));
+        // We are applying a 0.03% fee
+        outputAmount = bound(outputAmount, 1e18, outputReserves);
+        uint256 numerator = ((inputReserves * outputAmount) * 1_000);
+        uint256 denominator = ((outputReserves - outputAmount) * 997);
+        vm.assume(denominator > 0); // Avoid division by zero
+        uint256 expectedInputAmount = (numerator / denominator);
+
+        // Act
+        uint256 inputAmount = pool.getInputAmountBasedOnOutput(
+            outputAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // Assert
+        assertGt(inputAmount, expectedInputAmount);
+    }
+
+    function testSwapExactInputAlwaysReturnZero(
+        uint256 inputAmount,
+        uint256 minOutputAmount
+    ) public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        // Bound max to the user balance for allowance
+        inputAmount = bound(inputAmount, 1e18, poolToken.balanceOf(user));
+        minOutputAmount = bound(minOutputAmount, 1e18, weth.balanceOf(user));
+        // Check if we do not trigger TSwapPool__OutputTooLow error
+        uint256 inputReserves = poolToken.balanceOf(address(pool));
+        uint256 outputReserves = weth.balanceOf(address(pool));
+        uint256 outputAmount = pool.getOutputAmountBasedOnInput(
+            inputAmount,
+            inputReserves,
+            outputReserves
+        );
+        vm.assume(outputAmount > minOutputAmount); // Avoid triggering the revert
+
+        // Act
+        // Pranking user to swap exact input
+        vm.startPrank(user);
+        poolToken.approve(address(pool), 100e18);
+        uint256 outputReturned = pool.swapExactInput(
+            poolToken,
+            inputAmount,
+            weth,
+            minOutputAmount,
+            uint64(block.timestamp)
+        );
+        vm.stopPrank();
+
+        // Assert
+        assertEq(outputReturned, 0);
     }
 }
