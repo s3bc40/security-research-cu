@@ -256,3 +256,144 @@ function swapExactOutput(
 +       revert();
 +   }
 ```
+
+### [H-3] `TSwapPool::sellPoolTokens` mismatches input and output tokens causing users to receive the incorrect amount of tokens
+
+**Description:** The `sellPoolTokens` function is intended to allow users to sell their pool tokens for the underlying assets. However, the function mismatches the input and output tokens, causing users to receive the incorrect amount of tokens.
+
+This is due to the fact that the `swapExactOutput` function is called whereas the `swapExactInput` function should be called. The `swapExactOutput` function is intended to allow users to specify the exact amount of output tokens they want to receive, while the `swapExactInput` function allows users to specify the exact amount of input tokens they want to sell.
+
+**Impact:** Users will swap the wrong tokens, which is a severe disruption to the protocol. This could lead to a loss of funds for the user.
+
+**Proof of Concept:**
+Before running the POC, make sure to use these partially fixed functions from audit:
+```javascript
+    function auditFixGetInputAmountBasedOnOutput(
+        uint256 outputAmount,
+        uint256 inputReserves,
+        uint256 outputReserves
+    )
+        public
+        pure
+        revertIfZero(outputAmount)
+        revertIfZero(outputReserves)
+        returns (uint256 inputAmount)
+    {
+        // 997 / 10_000 = 91.3% fees!!
+        // @audit-issue HIGH wrong fees
+        // IMPACT: HIGH
+        // LIKELIHOOD: HIGH
+        return
+            ((inputReserves * outputAmount) * 1_000) /
+            ((outputReserves - outputAmount) * 997);
+    }
+
+    function auditFixedSwapExactOutput(
+        IERC20 inputToken,
+        IERC20 outputToken,
+        uint256 outputAmount,
+        // uint256 maxOutputAmount, @audit-issue
+        uint64 deadline
+    )
+        public
+        revertIfZero(outputAmount)
+        revertIfDeadlinePassed(deadline)
+        returns (uint256 inputAmount)
+    {
+        uint256 inputReserves = inputToken.balanceOf(address(this));
+        uint256 outputReserves = outputToken.balanceOf(address(this));
+
+        inputAmount = auditFixGetInputAmountBasedOnOutput(
+            outputAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // @audit-issue no slippage protection
+        // if (outputAmount > maxOutputAmount) {
+        //     revert TSwapPool__OutputTooHigh(outputAmount, maxOutputAmount);
+        // }
+
+        _swap(inputToken, inputAmount, outputToken, outputAmount);
+    }
+
+    function auditFixedSellPoolTokens(
+        uint256 poolTokenAmount
+    ) external returns (uint256 wethAmount) {
+        // @audit-issue wrong swap it should be wethAmount not poolTokenAmount
+        // or it should be a swapExactInput
+        return
+            auditFixedSwapExactOutput(
+                i_poolToken,
+                i_wethToken,
+                poolTokenAmount,
+                uint64(block.timestamp)
+            );
+    }
+```
+
+Then run this fuzz test to assess of the issue:
+```javascript
+    function testSellPoolTokensReturnsTheWrongAmount(
+        uint256 poolTokensAmount
+    ) public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        uint256 maxUserPoolTokenToSwap = poolToken.balanceOf(user) - 1e18; // To handle the fees of 0.03%
+        poolTokensAmount = bound(
+            poolTokensAmount,
+            1e18,
+            maxUserPoolTokenToSwap
+        );
+        vm.startPrank(user); // Prank as user before approval
+        poolToken.approve(address(pool), poolToken.balanceOf(user)); // Approve the pool to spend user's poolToken
+        uint256 inputReserves = poolToken.balanceOf(address(pool));
+        uint256 outputReserves = weth.balanceOf(address(pool));
+        uint256 expectedOutputAmount = pool.getOutputAmountBasedOnInput(
+            poolTokensAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // Act
+        uint256 outputAmount = pool.auditFixedSellPoolTokens(poolTokensAmount);
+        vm.stopPrank();
+
+        // Assert
+        assert(outputAmount != expectedOutputAmount);
+    }
+```
+
+
+**Recommended Mitigation:** 
+
+Consider changing the implementation to user `swapExactInput` instead of `swapExactOutput`. Note this would also require changing the `sellPoolTokens` function to accept a new parameter (ie `minWethToReceive` to be passed to `swapExactInput`).
+
+```diff
+    function sellPoolTokens(
+        uint256 poolTokenAmount
++       uint256 minWethToReceive, 
+    ) external returns (uint256 wethAmount) {
+        // @audit-issue wrong swap it should be wethAmount not poolTokenAmount
+        // or it should be a swapExactInput
+        return
+-            swapExactOutput(
+-                i_poolToken,
+-                i_wethToken,
+-                poolTokenAmount,
+-                uint64(block.timestamp)
+-            );
++            swapExactInput(
++                i_poolToken,
++                poolTokenAmount,
++                i_wethToken,
++                minWethToReceive,
++                uint64(block.timestamp)
++            );
+    }
+```

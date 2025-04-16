@@ -90,28 +90,6 @@
         "exploit": "",
         "recommendation": "Short term, \nLong term, \n"
       }
-    },
-    {
-      "label": "Missing deadline param in doc",
-      "entryType": 0,
-      "author": "s3bc40",
-      "locations": [
-        {
-          "path": "5-t-swap-audit/src/TSwapPool.sol",
-          "startLine": 332,
-          "endLine": 334,
-          "label": "",
-          "description": ""
-        }
-      ],
-      "details": {
-        "severity": "",
-        "difficulty": "",
-        "type": "",
-        "description": "",
-        "exploit": "",
-        "recommendation": "Short term, \nLong term, \n"
-      }
     }
   ],
   "auditedFiles": [],

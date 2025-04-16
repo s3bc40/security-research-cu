@@ -497,4 +497,68 @@ contract TSwapPool is ERC20 {
                 i_wethToken.balanceOf(address(this))
             );
     }
+
+    // AUDIT
+    function auditFixGetInputAmountBasedOnOutput(
+        uint256 outputAmount,
+        uint256 inputReserves,
+        uint256 outputReserves
+    )
+        public
+        pure
+        revertIfZero(outputAmount)
+        revertIfZero(outputReserves)
+        returns (uint256 inputAmount)
+    {
+        // 997 / 10_000 = 91.3% fees!!
+        // @audit-issue HIGH wrong fees
+        // IMPACT: HIGH
+        // LIKELIHOOD: HIGH
+        return
+            ((inputReserves * outputAmount) * 1_000) /
+            ((outputReserves - outputAmount) * 997);
+    }
+
+    function auditFixedSwapExactOutput(
+        IERC20 inputToken,
+        IERC20 outputToken,
+        uint256 outputAmount,
+        // uint256 maxOutputAmount, @audit-issue
+        uint64 deadline
+    )
+        public
+        revertIfZero(outputAmount)
+        revertIfDeadlinePassed(deadline)
+        returns (uint256 inputAmount)
+    {
+        uint256 inputReserves = inputToken.balanceOf(address(this));
+        uint256 outputReserves = outputToken.balanceOf(address(this));
+
+        inputAmount = auditFixGetInputAmountBasedOnOutput(
+            outputAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // @audit-issue no slippage protection
+        // if (outputAmount > maxOutputAmount) {
+        //     revert TSwapPool__OutputTooHigh(outputAmount, maxOutputAmount);
+        // }
+
+        _swap(inputToken, inputAmount, outputToken, outputAmount);
+    }
+
+    function auditFixedSellPoolTokens(
+        uint256 poolTokenAmount
+    ) external returns (uint256 wethAmount) {
+        // @audit-issue wrong swap it should be wethAmount not poolTokenAmount
+        // or it should be a swapExactInput
+        return
+            auditFixedSwapExactOutput(
+                i_poolToken,
+                i_wethToken,
+                poolTokenAmount,
+                uint64(block.timestamp)
+            );
+    }
 }

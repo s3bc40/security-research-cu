@@ -183,4 +183,38 @@ contract TSwapPoolTest is Test {
         // Assert
         assertEq(outputReturned, 0);
     }
+
+    function testSellPoolTokensReturnsTheWrongAmount(
+        uint256 poolTokensAmount
+    ) public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        uint256 maxUserPoolTokenToSwap = poolToken.balanceOf(user) - 1e18; // To handle the fees of 0.03%
+        poolTokensAmount = bound(
+            poolTokensAmount,
+            1e18,
+            maxUserPoolTokenToSwap
+        );
+        vm.startPrank(user); // Prank as user before approval
+        poolToken.approve(address(pool), poolToken.balanceOf(user)); // Approve the pool to spend user's poolToken
+        uint256 inputReserves = poolToken.balanceOf(address(pool));
+        uint256 outputReserves = weth.balanceOf(address(pool));
+        uint256 expectedOutputAmount = pool.getOutputAmountBasedOnInput(
+            poolTokensAmount,
+            inputReserves,
+            outputReserves
+        );
+
+        // Act
+        uint256 outputAmount = pool.auditFixedSellPoolTokens(poolTokensAmount);
+        vm.stopPrank();
+
+        // Assert
+        assert(outputAmount != expectedOutputAmount);
+    }
 }
