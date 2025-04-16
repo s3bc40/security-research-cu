@@ -124,6 +124,7 @@ contract TSwapPool is ERC20 {
         returns (uint256 liquidityTokensToMint)
     {
         if (wethToDeposit < MINIMUM_WETH_LIQUIDITY) {
+            // @audit-info constant so not needed to be emitted
             revert TSwapPool__WethDepositAmountTooLow(
                 MINIMUM_WETH_LIQUIDITY,
                 wethToDeposit
@@ -183,6 +184,9 @@ contract TSwapPool is ERC20 {
                 maximumPoolTokensToDeposit,
                 wethToDeposit
             );
+            // external call
+            // update variable but not not state var
+            // @audit-info - it would be better if it was before _addLiquidityMintAndTransfer -> CEI
             liquidityTokensToMint = wethToDeposit;
         }
     }
@@ -196,7 +200,11 @@ contract TSwapPool is ERC20 {
         uint256 poolTokensToDeposit,
         uint256 liquidityTokensToMint
     ) private {
+        // @audit-note follow CEI
         _mint(msg.sender, liquidityTokensToMint);
+        // @audit-issue LOW this is backward for params
+        // IMPACT: SUPER LOW - protocol is giving wrong return/info
+        // LIKELIHOOD: HIGH
         emit LiquidityAdded(msg.sender, poolTokensToDeposit, wethToDeposit);
 
         // Interactions
@@ -277,6 +285,8 @@ contract TSwapPool is ERC20 {
         // totalPoolTokensOfPool) + (wethToDeposit * poolTokensToDeposit) = k
         // (totalWethOfPool * totalPoolTokensOfPool) + (wethToDeposit * totalPoolTokensOfPool) = k - (totalWethOfPool *
         // poolTokensToDeposit) - (wethToDeposit * poolTokensToDeposit)
+        // @audit-info magic numbers
+        // 0.03% fee
         uint256 inputAmountMinusFee = inputAmount * 997;
         uint256 numerator = inputAmountMinusFee * outputReserves;
         uint256 denominator = (inputReserves * 1000) + inputAmountMinusFee;
@@ -294,11 +304,16 @@ contract TSwapPool is ERC20 {
         revertIfZero(outputReserves)
         returns (uint256 inputAmount)
     {
+        // 997 / 10_000 = 91.3% fees!!
+        // @audit-issue HIGH wrong fees
+        // IMPACT: HIGH
+        // LIKELIHOOD: HIGH
         return
-            ((inputReserves * outputAmount) * 10000) /
+            ((inputReserves * outputAmount) * 10_000) /
             ((outputReserves - outputAmount) * 997);
     }
 
+    // @audit-info natspec?
     function swapExactInput(
         IERC20 inputToken,
         uint256 inputAmount,
@@ -309,8 +324,10 @@ contract TSwapPool is ERC20 {
         public
         revertIfZero(inputAmount)
         revertIfDeadlinePassed(deadline)
-        // @audit-issue LOW wrong return
-        returns (uint256 output)
+        returns (
+            // @audit-issue LOW wrong return
+            uint256 output
+        )
     {
         uint256 inputReserves = inputToken.balanceOf(address(this));
         uint256 outputReserves = outputToken.balanceOf(address(this));
@@ -339,10 +356,12 @@ contract TSwapPool is ERC20 {
      * @param outputToken ERC20 token to send to caller
      * @param outputAmount The exact amount of tokens to send to caller
      */
+    // audit-question: why are we not getting the max input?
     function swapExactOutput(
         IERC20 inputToken,
         IERC20 outputToken,
         uint256 outputAmount,
+        // uint256 maxOutputAmount, @audit-issue
         uint64 deadline
     )
         public
@@ -359,6 +378,11 @@ contract TSwapPool is ERC20 {
             outputReserves
         );
 
+        // @audit-issue no slippage protection
+        // if (outputAmount > maxOutputAmount) {
+        //     revert TSwapPool__OutputTooHigh(outputAmount, maxOutputAmount);
+        // }
+
         _swap(inputToken, inputAmount, outputToken, outputAmount);
     }
 
@@ -370,6 +394,8 @@ contract TSwapPool is ERC20 {
     function sellPoolTokens(
         uint256 poolTokenAmount
     ) external returns (uint256 wethAmount) {
+        // @audit-issue wrong swap it should be wethAmount not poolTokenAmount
+        // or it should be a swapExactInput
         return
             swapExactOutput(
                 i_poolToken,
@@ -401,6 +427,7 @@ contract TSwapPool is ERC20 {
             revert TSwapPool__InvalidToken();
         }
 
+        // @audit-issue - breaking invariant! weird ERC20
         swap_count++;
         if (swap_count >= SWAP_COUNT_MAX) {
             swap_count = 0;
