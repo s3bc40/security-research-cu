@@ -68,28 +68,6 @@
         "exploit": "",
         "recommendation": "Short term, \nLong term, \n"
       }
-    },
-    {
-      "label": "Error not used",
-      "entryType": 0,
-      "author": "s3bc40",
-      "locations": [
-        {
-          "path": "5-t-swap-audit/src/PoolFactory.sol",
-          "startLine": 21,
-          "endLine": 21,
-          "label": "",
-          "description": ""
-        }
-      ],
-      "details": {
-        "severity": "",
-        "difficulty": "",
-        "type": "",
-        "description": "",
-        "exploit": "",
-        "recommendation": "Short term, \nLong term, \n"
-      }
     }
   ],
   "auditedFiles": [],

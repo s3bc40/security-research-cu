@@ -397,3 +397,81 @@ Consider changing the implementation to user `swapExactInput` instead of `swapEx
 +            );
     }
 ```
+
+### [H-4] In `TSwapPool::_swap` the extra tokens given to users after every `swapCount` breaks the protocol invariant of `x * y = k`
+
+**Description:** The protocol follows a struct invariant of `x * y = k`, where:
+- `x` is the amount of pool token
+- `y` is the amount of WETH
+- `k` is a constant value that represents the product of the two token amounts in the pool.
+
+This means, that whenever the balance change in the protocol, the ratio of the two tokens should remain constant, hence the `k`. However, this is broken due to the extra incentive in the `_swap` function. Meaning that over time the protocol funds will be drained.
+
+The following block of code is responsible of the issue:
+```javascript
+    swap_count++;
+    if (swap_count >= SWAP_COUNT_MAX) {
+        swap_count = 0;
+        outputToken.safeTransfer(msg.sender, 1_000_000_000_000_000_000);
+    }
+```
+
+**Impact:** A user could maliciously drain the protocol funds by doing a lot of swaps and collecting extra incentive given out by the protocol.
+
+Most simply put, the protocol core invariant is broken.
+
+**Proof of Concept:**
+1. A user swaps 10 times, and collects the extra incentive of `1_000_000_000_000_000_000` tokens.
+2. That user continues to swap until all the protocol funds are drained.
+
+<details>
+<summary>Proof Of Code</summary>
+
+Place the following in `TSwapPool.t.sol`:
+```javascript
+    function testInvariantBroken() public {
+        vm.startPrank(liquidityProvider);
+        weth.approve(address(pool), 100e18);
+        poolToken.approve(address(pool), 100e18);
+        pool.deposit(100e18, 100e18, 100e18, uint64(block.timestamp));
+        vm.stopPrank();
+
+        // Arrange
+        uint256 outputWeth = 1e17;
+        int256 startingY = int256(weth.balanceOf(address(pool)));
+        int256 expectedDeltaY = int256(-1) * int256(outputWeth);
+        poolToken.mint(user, 1e18);
+
+        // Act
+        // Swap 10 times to trigger the invariant
+        vm.startPrank(user);
+        poolToken.approve(address(pool), type(uint256).max);
+        for (uint i = 0; i < 10; i++) {
+            pool.swapExactOutput(
+                poolToken,
+                weth,
+                outputWeth,
+                uint64(block.timestamp)
+            );
+        }
+        vm.stopPrank();
+
+        // Assert
+        // Check if the invariant is broken
+        uint256 endingY = weth.balanceOf(address(pool));
+        int256 actualDeltaY = int256(endingY) - int256(startingY);
+        assertEq(actualDeltaY, expectedDeltaY);
+    }
+```
+
+</details>
+
+**Recommended Mitigation:** Remove the extra incentive. If you want to keep this in, we should account for the change in the `x * y = k`protocol invariant. Or, we should set aside tokens in the same way we do with fees.
+
+```diff
+-    swap_count++;
+-    if (swap_count >= SWAP_COUNT_MAX) {
+-        swap_count = 0;
+-        outputToken.safeTransfer(msg.sender, 1_000_000_000_000_000_000);
+-    }
+```
