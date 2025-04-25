@@ -74,6 +74,8 @@ import {OracleUpgradeable} from "./OracleUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFlashLoanReceiver} from "../interfaces/IFlashLoanReceiver.sol";
 
+// import {IThunderLoan} from "../interfaces/IThunderLoan.sol";
+
 contract ThunderLoan is
     Initializable,
     OwnableUpgradeable,
@@ -166,10 +168,15 @@ contract ThunderLoan is
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    // @audit-info change name to poolFactoryAddress
+    // @audit-low initializer can be front run -> mitigation: be sure to run initialize in deploy script
+    // what happens if we deploy the contract and someone else initializes it?
+    // they could set a different tswap address
     function initialize(address tswapAddress) external initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __Oracle_init(tswapAddress);
+        // @audit-info consider using a constant
         s_feePrecision = 1e18;
         s_flashLoanFee = 3e15; // 0.3% ETH fee
     }
@@ -226,7 +233,7 @@ contract ThunderLoan is
         }
 
         uint256 fee = getCalculatedFee(token, amount);
-        // audit-info
+        // audit-info mess up slither disable
         // slither-disable-next-line reentrancy-vulnerabilities-2 reentrancy-vulnerabilities-3
         // @audit-follow could be a reentrancy vulnerability
         assetToken.updateExchangeRate(fee);
@@ -235,8 +242,10 @@ contract ThunderLoan is
 
         s_currentlyFlashLoaning[token] = true;
         assetToken.transferUnderlyingTo(receiverAddress, amount);
+        // audit-info mess up slither disable
         // slither-disable-next-line unused-return reentrancy-vulnerabilities-2
         // @audit-follow could be a reentrancy vulnerability
+        // @audit-follow do we need to check the return value?
         receiverAddress.functionCall(
             abi.encodeCall(
                 IFlashLoanReceiver.executeOperation,
@@ -325,6 +334,7 @@ contract ThunderLoan is
         return address(s_tokenToAssetToken[token]) != address(0);
     }
 
+    // @audit-info consider marking it as external
     function getAssetFromToken(IERC20 token) public view returns (AssetToken) {
         return s_tokenToAssetToken[token];
     }
