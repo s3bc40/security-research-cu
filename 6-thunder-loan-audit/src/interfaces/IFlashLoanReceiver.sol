@@ -11,9 +11,9 @@ import {IThunderLoan} from "./IThunderLoan.sol";
  * https://github.com/aave/aave-v3-core/blob/master/contracts/flashloan/interfaces/IFlashLoanReceiver.sol
  */
 interface IFlashLoanReceiver {
-    // @audit-question is the token, the token that is being borrowed?
+    // @answered is the token, the token that is being borrowed? Yes
     // natspec?
-    // @audit-question the amount is the amount of tokens?
+    // @answered the amount is the amount of tokens? Yes
     // @audit-question is the fee, the fee that is being paid for the loan?
     function executeOperation(
         address token,

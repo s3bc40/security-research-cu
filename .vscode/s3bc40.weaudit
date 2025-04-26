@@ -2,74 +2,7 @@
   "clientRemote": "https://github.com/s3bc40/security-research-cu",
   "gitRemote": "https://github.com/s3bc40/security-research-cu",
   "gitSha": "0cfd78447bc39b745fecd5e7cdd4b4c446ff0d8e",
-  "treeEntries": [
-    {
-      "label": "Breaking invariant from weird ERC20",
-      "entryType": 0,
-      "author": "s3bc40",
-      "locations": [
-        {
-          "path": "5-t-swap-audit/src/TSwapPool.sol",
-          "startLine": 398,
-          "endLine": 402,
-          "label": "",
-          "description": ""
-        }
-      ],
-      "details": {
-        "severity": "High",
-        "difficulty": "Low",
-        "type": "",
-        "description": "",
-        "exploit": "",
-        "recommendation": "Short term, \nLong term, \n"
-      }
-    },
-    {
-      "label": "Lacks a zero-check",
-      "entryType": 0,
-      "author": "s3bc40",
-      "locations": [
-        {
-          "path": "5-t-swap-audit/src/PoolFactory.sol",
-          "startLine": 40,
-          "endLine": 40,
-          "label": "",
-          "description": ""
-        }
-      ],
-      "details": {
-        "severity": "",
-        "difficulty": "",
-        "type": "",
-        "description": "",
-        "exploit": "",
-        "recommendation": "Short term, \nLong term, \n"
-      }
-    },
-    {
-      "label": "Public Function Not Used Internally",
-      "entryType": 0,
-      "author": "s3bc40",
-      "locations": [
-        {
-          "path": "5-t-swap-audit/src/TSwapPool.sol",
-          "startLine": 304,
-          "endLine": 304,
-          "label": "",
-          "description": ""
-        }
-      ],
-      "details": {
-        "severity": "Informational",
-        "difficulty": "N/A",
-        "type": "",
-        "description": "",
-        "exploit": "",
-        "recommendation": "Short term, \nLong term, \n"
-      }
-    }
-  ],
+  "treeEntries": [],
   "auditedFiles": [],
   "partiallyAuditedFiles": [],
   "resolvedEntries": []

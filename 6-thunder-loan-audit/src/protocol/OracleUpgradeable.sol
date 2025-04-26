@@ -30,6 +30,10 @@ contract OracleUpgradeable is Initializable {
     // price may be manipulated?
     // reentrancy attack? -> Check the code even external
     // check tests? @audit-info you should use forked tests for this
+
+    // @audit-note analyze previous audit on TSwapPool to check if something is off
+    // it seems that the decimal could be wrong (check TSwapPool)
+    // @audit-question what if the token has 6 decimals? Is the price wrong?
     function getPriceInWeth(address token) public view returns (uint256) {
         address swapPoolOfToken = IPoolFactory(s_poolFactory).getPool(token);
         return ITSwapPool(swapPoolOfToken).getPriceOfOnePoolTokenInWeth();

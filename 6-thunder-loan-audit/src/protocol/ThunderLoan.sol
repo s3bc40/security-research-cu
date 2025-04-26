@@ -218,6 +218,7 @@ contract ThunderLoan is
         if (amountOfAssetToken == type(uint256).max) {
             amountOfAssetToken = assetToken.balanceOf(msg.sender);
         }
+        // @audit-note (1e6 * 2e18) / 1e18 = 2e6 (chisel checked)
         uint256 amountUnderlying = (amountOfAssetToken * exchangeRate) /
             assetToken.EXCHANGE_RATE_PRECISION();
         emit Redeemed(msg.sender, token, amountOfAssetToken, amountUnderlying);
@@ -225,13 +226,14 @@ contract ThunderLoan is
         assetToken.transferUnderlyingTo(msg.sender, amountUnderlying);
     }
 
+    // @audit-info natspec?
     function flashloan(
-        address receiverAddress,
-        IERC20 token,
-        uint256 amount,
-        bytes calldata params
+        address receiverAddress,// address of the contract that will receive the flashloan
+        IERC20 token, // token to flashloan
+        uint256 amount, // amount to flashloan
+        bytes calldata params // params to call the receiver address with
     ) external revertIfZero(amount) revertIfNotAllowedToken(token) {
-        AssetToken assetToken = s_tokenToAssetToken[token];
+        AssetToken assetToken = s_tokenToAssetToken[token]; // shares
         uint256 startingBalance = IERC20(token).balanceOf(address(assetToken));
 
         if (amount > startingBalance) {
@@ -242,6 +244,7 @@ contract ThunderLoan is
             revert ThunderLoan__CallerIsNotContract();
         }
 
+        // @audit-note maybe the fee of the flash loan
         uint256 fee = getCalculatedFee(token, amount);
         // audit-info mess up slither disable
         // slither-disable-next-line reentrancy-vulnerabilities-2 reentrancy-vulnerabilities-3
@@ -326,11 +329,14 @@ contract ThunderLoan is
     }
 
     // @audit-info natspec
+    // @param amount the amount being borrowed
+    // @param token the token being borrowed
     function getCalculatedFee(
         IERC20 token,
         uint256 amount
     ) public view returns (uint256 fee) {
         //slither-disable-next-line divide-before-multiply
+        // @audit-note this is why we need TSwap for getPriceInWeth
         uint256 valueOfBorrowedToken = (amount *
             getPriceInWeth(address(token))) / s_feePrecision;
         //slither-disable-next-line divide-before-multiply
@@ -372,3 +378,5 @@ contract ThunderLoan is
         address newImplementation
     ) internal override onlyOwner {}
 }
+
+// @audit-checked
