@@ -92,7 +92,8 @@ contract AssetToken is ERC20 {
         uint256 amount
     ) external onlyThunderLoan {
         // @audit-question weird ERC20s , what happens if USDC blacklists the contract?
-        // @audit-follow weird ERC20s to check
+        // @audit-medium protocol would be frozen -> USDC blacklists the contract 
+        // Competitive audit -> if one block and everyone else is frozen then yes!
         i_underlying.safeTransfer(to, amount);
     }
 

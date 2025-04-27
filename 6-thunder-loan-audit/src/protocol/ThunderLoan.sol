@@ -245,6 +245,7 @@ contract ThunderLoan is
         }
 
         // @audit-note maybe the fee of the flash loan
+        // it doesn't make sense to add a fee in `WETH` to these numbers! Our price is going to be all wrong!
         uint256 fee = getCalculatedFee(token, amount);
         // audit-info mess up slither disable
         // slither-disable-next-line reentrancy-vulnerabilities-2 reentrancy-vulnerabilities-3
@@ -271,6 +272,8 @@ contract ThunderLoan is
                 )
             )
         );
+        // Our `endingBalance` and `startingBalance` variables are token balances for our `underlying token`, 
+        // these aren't converted to `WETH` at any time, 
 
         uint256 endingBalance = token.balanceOf(address(assetToken));
         if (endingBalance < startingBalance + fee) {
@@ -337,6 +340,16 @@ contract ThunderLoan is
     ) public view returns (uint256 fee) {
         //slither-disable-next-line divide-before-multiply
         // @audit-note this is why we need TSwap for getPriceInWeth
+
+        // 1 USDC
+        // 0.1 WETH
+        // 1e18???
+        // why the price in WETH?
+
+        // 1 USDC == 0.1 WETH
+        // 1 USDC + 0.01 WETH
+        // 1 USDC + 0.01 USDC??
+        // @audit-high if the fee is going to be in the token, then the value stored should reflect that
         uint256 valueOfBorrowedToken = (amount *
             getPriceInWeth(address(token))) / s_feePrecision;
         //slither-disable-next-line divide-before-multiply
